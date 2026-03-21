@@ -1,0 +1,130 @@
+# =============================================================
+# PRODUCTION DOCKER COMPOSE
+#
+# Pré-requisitos no servidor:
+#   - users-service/.env.production preenchido
+#   - finance-service/.env.production preenchido
+#   - Caddyfile com o domínio real
+#
+# Como subir:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# CI/CD — o pipeline injeta as imagens antes de rodar:
+#   export USERS_SERVICE_IMAGE=ghcr.io/<user>/users-service:<sha>
+#   export FINANCE_SERVICE_IMAGE=ghcr.io/<user>/finance-service:<sha>
+#   docker compose -f docker-compose.prod.yml pull && up -d
+#
+# Primeiro deploy — rode o seed uma única vez após subir:
+#   docker compose -f docker-compose.prod.yml exec finance-service yarn run seed
+# =============================================================
+
+services:
+
+  # ---- Kafka (KRaft — sem Zookeeper) ----
+  kafka:
+    image: confluentinc/cp-kafka:7.9.0
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "cub kafka-ready -b kafka:9092 1 20"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ---- Users DB ----
+  # POSTGRES_USER, POSTGRES_PASSWORD e POSTGRES_DB vêm do env_file.
+  # O $$ no healthcheck escapa a interpolação do compose — o shell do container
+  # expande $POSTGRES_USER / $POSTGRES_DB em runtime (onde as vars já existem).
+  users-service-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: ./users-service/.env.production
+    volumes:
+      - users_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- Users Service ----
+  # CI/CD: seta USERS_SERVICE_IMAGE com a tag do commit.
+  # Localmente: omita a variável e o compose faz o build via Dockerfile.
+  users-service:
+    image: ${USERS_SERVICE_IMAGE:-users-service:latest}
+    build:
+      context: ./users-service
+    restart: unless-stopped
+    env_file: ./users-service/.env.production
+    depends_on:
+      users-service-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    # prisma migrate deploy é idempotente — seguro rodar a cada deploy.
+    command: sh -c "npx prisma migrate deploy && yarn start:prod"
+
+  # ---- Finance DB ----
+  finance-service-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: ./finance-service/.env.production
+    volumes:
+      - finance_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- Finance Service ----
+  finance-service:
+    image: ${FINANCE_SERVICE_IMAGE:-finance-service:latest}
+    build:
+      context: ./finance-service
+    restart: unless-stopped
+    env_file: ./finance-service/.env.production
+    depends_on:
+      finance-service-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && yarn start:prod"
+
+  # ---- Caddy (Reverse Proxy + SSL automático via Let's Encrypt) ----
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - users-service
+      - finance-service
+
+volumes:
+  kafka_data:
+  users_db_data:
+  finance_db_data:
+  caddy_data:
+  caddy_config:
