@@ -1,0 +1,36 @@
+name: Deploy to VPS
+
+on:
+  # Disparado pelos repos de serviço após build da imagem
+  repository_dispatch:
+    types: [deploy]
+
+  # Permite rodar manualmente pela UI do GitHub
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH no VPS e deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Login no ghcr.io para poder fazer pull das imagens privadas
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u matheus-santos-da-silva --password-stdin
+
+            cd /opt/money-track-infra
+
+            # Atualiza o compose file caso tenha mudado
+            git pull
+
+            # Puxa as imagens mais recentes e recria os containers que mudaram
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+
+            # Remove imagens antigas para liberar espaço em disco
+            docker image prune -f
