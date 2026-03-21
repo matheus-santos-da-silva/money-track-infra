@@ -26,7 +26,7 @@ jobs:
             cd /opt/money-track-infra
 
             # Atualiza o compose file caso tenha mudado
-            git pull
+            GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git pull
 
             # Puxa as imagens mais recentes e recria os containers que mudaram
             docker compose -f docker-compose.prod.yml pull
