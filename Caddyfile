@@ -12,12 +12,12 @@
 moneytrack.shop {
 
     # Users Service
-    handle /users/* {
+    handle /users* {
         reverse_proxy users-service:3000
     }
 
     # Finance Service
-    handle /finance/* {
+    handle /finance* {
         reverse_proxy finance-service:3001
     }
 
