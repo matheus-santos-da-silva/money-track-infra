@@ -30,8 +30,10 @@ jobs:
             # Atualiza o compose file caso tenha mudado
             GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git pull
 
-            USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest docker compose -f docker-compose.prod.yml pull
-            USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest docker compose -f docker-compose.prod.yml up -d
+            export USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest
+            export FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
 
             # Remove imagens antigas para liberar espaço em disco
             docker image prune -f
