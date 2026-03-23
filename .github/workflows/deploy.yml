@@ -28,6 +28,9 @@ jobs:
             # Atualiza o compose file caso tenha mudado
             GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git pull
 
+            export USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest
+            export FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest
+
             # Puxa as imagens mais recentes e recria os containers que mudaram
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
