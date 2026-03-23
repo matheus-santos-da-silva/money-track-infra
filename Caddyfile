@@ -1,6 +1,3 @@
-# Troque "your-domain.com" pelo seu domínio real.
-# O Caddy obtém e renova o certificado SSL automaticamente.
-#
 # Roteamento:
 #   https://moneytrack.shop/users/*   → users-service:3000
 #   https://moneytrack.shop/finance/* → finance-service:3001
@@ -11,17 +8,16 @@
 
 moneytrack.shop {
 
-    # Users Service
-    handle /users* {
+    @users path /users /users/*
+    handle @users {
         reverse_proxy users-service:3000
     }
 
-    # Finance Service
-    handle /finance* {
+    @finance path /finance /finance/*
+    handle @finance {
         reverse_proxy finance-service:3001
     }
-
-    # Qualquer outra rota retorna 404
+    
     handle {
         respond 404
     }
