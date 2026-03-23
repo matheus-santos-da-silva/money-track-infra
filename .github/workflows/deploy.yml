@@ -20,6 +20,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
+            
             # Login no ghcr.io para poder fazer pull das imagens privadas
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u matheus-santos-da-silva --password-stdin
 
@@ -28,12 +30,8 @@ jobs:
             # Atualiza o compose file caso tenha mudado
             GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git pull
 
-            export USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest
-            export FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest
-
-            # Puxa as imagens mais recentes e recria os containers que mudaram
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
+            USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest docker compose -f docker-compose.prod.yml pull
+            USERS_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/users-service:latest FINANCE_SERVICE_IMAGE=ghcr.io/matheus-santos-da-silva/finance-service:latest docker compose -f docker-compose.prod.yml up -d
 
             # Remove imagens antigas para liberar espaço em disco
             docker image prune -f
