@@ -15,12 +15,10 @@
 #   docker compose -f docker-compose.prod.yml pull && up -d
 #
 # Primeiro deploy — rode o seed uma única vez após subir:
-#   docker compose -f docker-compose.prod.yml exec finance-service yarn run seed
+#   docker compose -f docker-compose.prod.yml exec finance-service yarn run seed:prod
 # =============================================================
 
 services:
-
-  # ---- Kafka (KRaft — sem Zookeeper) ----
   kafka:
     image: confluentinc/cp-kafka:7.9.0
     restart: unless-stopped
@@ -106,14 +104,13 @@ services:
         condition: service_healthy
     command: sh -c "npx prisma migrate deploy && yarn start:prod"
 
-  # ---- Caddy (Reverse Proxy + SSL automático via Let's Encrypt) ----
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp" # HTTP/3
+      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
