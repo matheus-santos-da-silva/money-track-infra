@@ -18,8 +18,17 @@
 #   docker compose -f docker-compose.prod.yml exec finance-service yarn run seed:prod
 # =============================================================
 
+# Rotação dos logs de cada container: no máximo 3 arquivos de 10 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    compress: "true"
+
 services:
   kafka:
+    logging: *logging
     image: confluentinc/cp-kafka:7.9.0
     restart: unless-stopped
     environment:
@@ -49,6 +58,7 @@ services:
   # O $$ no healthcheck escapa a interpolação do compose — o shell do container
   # expande $POSTGRES_USER / $POSTGRES_DB em runtime (onde as vars já existem).
   users-service-db:
+    logging: *logging
     image: postgres:16-alpine
     restart: unless-stopped
     env_file: ./users-service/.env.production
@@ -64,6 +74,7 @@ services:
   # CI/CD: seta USERS_SERVICE_IMAGE com a tag do commit.
   # Localmente: omita a variável e o compose faz o build via Dockerfile.
   users-service:
+    logging: *logging
     image: ${USERS_SERVICE_IMAGE:-users-service:latest}
     build:
       context: ./users-service
@@ -76,9 +87,16 @@ services:
         condition: service_healthy
     # prisma migrate deploy é idempotente — seguro rodar a cada deploy.
     command: sh -c "npx prisma migrate deploy && yarn start:prod"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health/ready || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
   # ---- Finance DB ----
   finance-service-db:
+    logging: *logging
     image: postgres:16-alpine
     restart: unless-stopped
     env_file: ./finance-service/.env.production
@@ -92,6 +110,7 @@ services:
 
   # ---- Finance Service ----
   finance-service:
+    logging: *logging
     image: ${FINANCE_SERVICE_IMAGE:-finance-service:latest}
     build:
       context: ./finance-service
@@ -103,8 +122,15 @@ services:
       kafka:
         condition: service_healthy
     command: sh -c "npx prisma migrate deploy && yarn start:prod"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health/ready || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
   caddy:
+    logging: *logging
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
@@ -116,8 +142,10 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - users-service
-      - finance-service
+      users-service:
+        condition: service_healthy
+      finance-service:
+        condition: service_healthy
 
 volumes:
   kafka_data:
